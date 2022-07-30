@@ -10,6 +10,7 @@ from enum import Enum
 import time
 import socket
 import json
+from socket import error as socket_error
 
 # ~~~~~============== CONFIGURATION  ==============~~~~~
 # Replace "REPLACEME" with your team name!
@@ -27,11 +28,130 @@ dict_book = {
     "XLF": []
 }
 
+dict_positions = {
+    "BOND": 0,
+    "VALBZ": 0,
+    "VALE": 0,
+    "GS": 0,
+    "MS": 0,
+    "WFC": 0,
+    "XLF": 0
+}
+
+dict_trades = {
+    "BOND": [],
+    "VALBZ": [],
+    "VALE": [],
+    "GS": [],
+    "MS": [],
+    "WFC": [],
+    "XLF": []
+}
+
 order_id = 0
 
 # ~~~~~============== HELPER FUNCTIONS ==============~~~~~
 def bond_trade(exchange, message):
     return
+
+def avg(trades):
+    return sum(trades) / len(trades)
+
+def etf_last10_averages(XLF_trades, bond_trades, GS_trades, MS_trades, WFC_trades):
+    margin = 150
+    XLF_avg = avg(XLF_trades[-10:])
+    bond_avg = avg(bond_trades[-10:])
+    GS_avg = avg(GS_trades[-10:])
+    MS_avg = avg(MS_trades[-10:])
+    WFC_avg = avg(WFC_trades[-10:])
+
+    if (10*(XLF_avg) + margin < (3*bond_avg + 2*GS_avg + 3*MS_avg + 2*WFC_avg)):
+        return [True, XLF_avg, bond_avg, GS_avg, MS_avg, WFC_avg]
+
+    if (10*(XLF_avg) - margin > (3*bond_avg + 2*GS_avg + 3*MS_avg + 2*WFC_avg)):
+        return [False, XLF_avg, bond_avg, GS_avg, MS_avg, WFC_avg]
+
+def updated_etf_trade(exchange, xlf, bond, gs, ms, wfc):
+    print("using etf")
+
+
+    xlf_trades = xlf[-15:] 
+    bond_trades = bond[-15:]
+    gs_trades = gs[-15:]
+    ms_trades = ms[-15:]
+    wfc_trades = wfc[-15:]
+    
+    trades = etf_last10_averages(xlf_trades, bond_trades, gs_trades, ms_trades, wfc_trades)
+
+    if (trades[0]):
+        print("ETF to stocks\n")
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=100)
+        
+        order_id += 1
+        exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=1)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=dict_trades['BOND'][-1], size=30)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="GS", dir=Dir.SELL, price=dict_trades['GS'][-1], size=20)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="MS", dir=Dir.SELL, price=dict_trades['MS'][-1], size=30)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="WFC", dir=Dir.SELL, price=dict_trades['WFC'][-1], size=20)
+
+    else:
+        print("Stocks to ETF\n")
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=dict_trades['BOND'][-1], size=30)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="GS", dir=Dir.BUY, price=dict_trades['GS'][-1], size=20)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="MS", dir=Dir.BUY, price=dict_trades['MS'][-1], size=30)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="WFC", dir=Dir.BUY, price=dict_trades['WFC'][-1], size=20)
+
+        order_id += 1
+        exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=1)
+
+        order_id += 1
+        exchange.send_add_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=100)
+
+# ~~~~~============== STRATS ==============~~~~~
+def adr(exchange, valbz_trades, vale_trades):
+    global order_id
+    # do we want to take the average of the entire list
+    # or do we want to take the average of the past 10 trades
+    margin = 1
+    if (len(valbz_trades) >= 10 and len(vale_trades) >=10):
+        fair_value = avg(valbz_trades[-10:])
+        if (avg(vale_trades[-10:]) - fair_value >=2):
+            if (dict_positions["VALE"] < 10):
+                #buy illiquid
+                order_id += 1
+                exchange.send_add_message(order_id, "VALE", Dir.BUY, int(fair_value - margin), 1)
+                dict_positions["VALE"] += 1
+            
+            # if (dict_positions["VALE"] > 0):
+            #     #sell illiquid
+            #     order_id += 1
+            #     exchange.send_add_message(order_id, "VALE", Dir.SELL, int(fair_value + margin), 1)
+
+            if (dict_positions["VALE"] == 10):
+                order_id += 1
+                exchange.send_convert_message(order_id, "VALE", Dir.SELL, 10)
+                dict_positions["VALE"] -= 10
+                order_id += 1
+                exchange.send_add_message(order_id, "VALBZ", Dir.SELL, int(fair_value + margin), 10)
+
+            
+            time.sleep(0.01)
 
 
 # ~~~~~============== MAIN LOOP ==============~~~~~
@@ -48,6 +168,7 @@ def bond_trade(exchange, message):
 
 def main():
     global order_id
+    orders = {"BOND": 0, "VALBZ": 0, "VALE": 0, "GS": 0, "MS": 0, "WFC": 0, "XLF": 0}
     args = parse_arguments()
 
     exchange = ExchangeConnection(args=args)
@@ -63,10 +184,10 @@ def main():
     # Send an order for BOND at a good price, but it is low enough that it is
     # unlikely it will be traded against. Maybe there is a better price to
     # pick? Also, you will need to send more orders over time.
-    order_id += 1
-    exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=999, size=100)
-    order_id += 1
-    exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=1001, size=100)
+    # order_id += 1
+    # exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=999, size=100)
+    # order_id += 1
+    # exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=1001, size=100)
 
     # Set up some variables to track the bid and ask price of a symbol. Right
     # now this doesn't track much information, but it's enough to get a sense
@@ -87,7 +208,9 @@ def main():
     # cause a feedback loop where your bot's messages will quickly be
     # rate-limited and ignored. Please, don't do that!
     while True:
+
         message = exchange.read_message()
+        adr(exchange, dict_trades["VALBZ"], dict_trades["VALE"])
 
         # Some of the message types below happen infrequently and contain
         # important information to help you understand what your bot is doing,
@@ -96,21 +219,74 @@ def main():
         # your code handle the messages and just print the information
         # important for you!
         if message["type"] == "close":
+            print(dict_positions)
             print("The round has ended")
             break
         elif message["type"] == "trade":
-            print(message)      
+            if message["symbol"] == "VALBZ":
+                for index in range(message["size"]):
+                    dict_trades["VALBZ"].append(message["price"])
+            if message["symbol"] == "VALE":
+                for index in range(message["size"]):
+                    dict_trades["VALE"].append(message["price"])
+            if message["symbol"] == "BOND":
+                    if (message["price"] > 1000 and dict_positions["BOND"]>=-10):
+                        order_id +=1
+                        exchange.send_add_message(order_id, "BOND", Dir.SELL, 1001, 1)
+                    if (message["price"] < 1000 and dict_positions["BOND"]<=99):
+                        order_id += 1
+                        exchange.send_add_message(order_id, "BOND", Dir.BUY,  999, 1)
+                
+            # print(messagse)      
         elif message["type"] == "error":
+        
             print(message)
         elif message["type"] == "reject":
             print(message)
         elif message["type"] == "fill":
             print(message)
-        elif message["type"] == "book":
-            if message["symbol"] == "BOND":
-                dict_book["BOND"].append(message["price"])
+            # if (message["symbol"] == "BOND"):
+            #     if (message["dir"] == "BUY"):
+            #         dict_positions["BOND"] += message["size"]
+            #         continue
+            #     else:
+            #         dict_positions["BOND"] -= message["size"]
+            #         continue
             
-            if message["symbol"] == "VALE":
+            # if (message["symbol"] == "VALBZ"):
+            #     if (message["dir"] == "BUY"):
+            #         dict_positions["VALBZ"] += message["size"]
+            #         continue
+            #     else:
+            #         dict_positions["VALBZ"] -= message["size"]
+            #         continue
+            
+            # if (message["symbol"] == "VALE"):
+            #     if (message["dir"] == "BUY"):
+            #         dict_positions["VALE"] += message["size"]
+            #         continue
+            #     else:
+            #         dict_positions["VALE"] -= message["size"]
+            #         continue
+            
+            # if (message["symbol"] == "XLF"):
+            #     if (message["dir"] == "BUY"):
+            #         dict_positions["XLF"] += 100
+            #         dict_positions["BOND"] -= 30
+            #         dict_positions["GS"] -= 20
+            #         dict_positions["MS"] -= 30
+            #         dict_positions["WFC"] -= 20
+            #         continue
+            #     else:
+            #         dict_positions["XLF"] -= 100
+            #         dict_positions["BOND"]+= 30
+            #         dict_positions["GS"] += 20
+            #         dict_positions["MS"] += 30
+            #         dict_positions["WFC"] += 20
+            #         continue
+        elif message["type"] == "book":
+            
+            ''' if message["symbol"] == "VALE":
 
                 def best_price(side):
                     if message[side]:
@@ -128,7 +304,13 @@ def main():
                             "vale_bid_price": vale_bid_price,
                             "vale_ask_price": vale_ask_price,
                         }
-                    )
+                    ) '''
+    while True:
+         try:
+             main()
+         except socket_error:
+             print ("\r\n----------------Main: socket error,do reconnect----------------")
+             time.sleep(0.1)
 
 
 # ~~~~~============== PROVIDED CODE ==============~~~~~
@@ -256,7 +438,8 @@ def parse_arguments():
 if __name__ == "__main__":
     # Check that [team_name] has been updated.
     assert (
-        team_name != "FRAPPE"
+        team_name != "team_name"
     ), "Please put your team name in the variable [team_name]."
 
     main()
+
