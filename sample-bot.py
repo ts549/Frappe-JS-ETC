@@ -13,7 +13,26 @@ import json
 
 # ~~~~~============== CONFIGURATION  ==============~~~~~
 # Replace "REPLACEME" with your team name!
-team_name = "REPLACEME"
+team_name = "FRAPPE"
+
+# ~~~~~============== VARIABLES ==============~~~~~
+## Book Prices
+dict_book = {
+    "BOND": [],
+    "VALBZ": [],
+    "VALE": [],
+    "GS": [],
+    "MS": [],
+    "WFC": [],
+    "XLF": []
+}
+
+order_id = 0
+
+# ~~~~~============== HELPER FUNCTIONS ==============~~~~~
+def bond_trade(exchange, message):
+    return
+
 
 # ~~~~~============== MAIN LOOP ==============~~~~~
 
@@ -28,6 +47,7 @@ team_name = "REPLACEME"
 
 
 def main():
+    global order_id
     args = parse_arguments()
 
     exchange = ExchangeConnection(args=args)
@@ -39,10 +59,14 @@ def main():
     hello_message = exchange.read_message()
     print("First message from exchange:", hello_message)
 
+
     # Send an order for BOND at a good price, but it is low enough that it is
     # unlikely it will be traded against. Maybe there is a better price to
     # pick? Also, you will need to send more orders over time.
-    exchange.send_add_message(order_id=1, symbol="BOND", dir=Dir.BUY, price=990, size=1)
+    order_id += 1
+    exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=999, size=100)
+    order_id += 1
+    exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=1001, size=100)
 
     # Set up some variables to track the bid and ask price of a symbol. Right
     # now this doesn't track much information, but it's enough to get a sense
@@ -74,6 +98,8 @@ def main():
         if message["type"] == "close":
             print("The round has ended")
             break
+        elif message["type"] == "trade":
+            print(message)      
         elif message["type"] == "error":
             print(message)
         elif message["type"] == "reject":
@@ -81,6 +107,9 @@ def main():
         elif message["type"] == "fill":
             print(message)
         elif message["type"] == "book":
+            if message["symbol"] == "BOND":
+                dict_book["BOND"].append(message["price"])
+            
             if message["symbol"] == "VALE":
 
                 def best_price(side):
@@ -227,7 +256,7 @@ def parse_arguments():
 if __name__ == "__main__":
     # Check that [team_name] has been updated.
     assert (
-        team_name != "REPLACEME"
+        team_name != "FRAPPE"
     ), "Please put your team name in the variable [team_name]."
 
     main()
