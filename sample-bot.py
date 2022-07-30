@@ -71,6 +71,15 @@ def etf_last10_averages(XLF_trades, bond_trades, GS_trades, MS_trades, WFC_trade
     if (10*(XLF_avg) - margin > (3*bond_avg + 2*GS_avg + 3*MS_avg + 2*WFC_avg)):
         return [False, XLF_avg, bond_avg, GS_avg, MS_avg, WFC_avg]
 
+def etf_recent(XLF_trades, bond_trades, GS_trades, MS_trades, WFC_trades):
+    margin = 150
+    
+    if (10*(XLF_trades[-1:]) + margin < (3*bond_trades[-1:0] + 2*GS_trades[-1:0] + 3*MS_trades[-1:0] + 2*WFC_trades[-1:0])):
+        return [True, XLF_trades[-1:], bond_trades[-1:], GS_trades[-1:], MS_trades[-1:], WFC_trades[-1:]]
+
+    if (10*(XLF_trades[-1:]) - margin > (3*bond_trades[-1:0] + 2*GS_trades[-1:0] + 3*MS_trades[-1:0] + 2*WFC_trades[-1:0])):
+        return [False, XLF_trades[-1:], bond_trades[-1:], GS_trades[-1:], MS_trades[-1:], WFC_trades[-1:]]
+
 def updated_etf_trade(exchange, xlf, bond, gs, ms, wfc):
     print("using etf")
 
@@ -81,47 +90,48 @@ def updated_etf_trade(exchange, xlf, bond, gs, ms, wfc):
     ms_trades = ms[-15:]
     wfc_trades = wfc[-15:]
     
-    trades = etf_last10_averages(xlf_trades, bond_trades, gs_trades, ms_trades, wfc_trades)
+    trades = etf_recent(xlf_trades, bond_trades, gs_trades, ms_trades, wfc_trades)
 
-    if (trades[0]):
-        print("ETF to stocks\n")
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=100)
-        
-        order_id += 1
-        exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=1)
+    if len(xlf) > 15 and len(bond) > 15 and len(gs) > 15 and len(ms) > 15 and len(wfc) > 15 :
+        if (trades[0]):
+            print("ETF to stocks\n")
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=100)
+            
+            order_id += 1
+            exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=1)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=dict_trades['BOND'][-1], size=30)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="BOND", dir=Dir.SELL, price=dict_trades['BOND'][-1], size=30)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="GS", dir=Dir.SELL, price=dict_trades['GS'][-1], size=20)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="GS", dir=Dir.SELL, price=dict_trades['GS'][-1], size=20)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="MS", dir=Dir.SELL, price=dict_trades['MS'][-1], size=30)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="MS", dir=Dir.SELL, price=dict_trades['MS'][-1], size=30)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="WFC", dir=Dir.SELL, price=dict_trades['WFC'][-1], size=20)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="WFC", dir=Dir.SELL, price=dict_trades['WFC'][-1], size=20)
 
-    else:
-        print("Stocks to ETF\n")
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=dict_trades['BOND'][-1], size=30)
+        else:
+            print("Stocks to ETF\n")
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="BOND", dir=Dir.BUY, price=dict_trades['BOND'][-1], size=30)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="GS", dir=Dir.BUY, price=dict_trades['GS'][-1], size=20)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="GS", dir=Dir.BUY, price=dict_trades['GS'][-1], size=20)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="MS", dir=Dir.BUY, price=dict_trades['MS'][-1], size=30)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="MS", dir=Dir.BUY, price=dict_trades['MS'][-1], size=30)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="WFC", dir=Dir.BUY, price=dict_trades['WFC'][-1], size=20)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="WFC", dir=Dir.BUY, price=dict_trades['WFC'][-1], size=20)
 
-        order_id += 1
-        exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=1)
+            order_id += 1
+            exchange.send_convert_message(order_id, symbol="XLF", dir=Dir.BUY, price=dict_trades['XLF'][-1], size=1)
 
-        order_id += 1
-        exchange.send_add_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=100)
+            order_id += 1
+            exchange.send_add_message(order_id, symbol="XLF", dir=Dir.SELL, price=dict_trades['XLF'][-1], size=100)
 
 # ~~~~~============== STRATS ==============~~~~~
 def adr(exchange, valbz_trades, vale_trades):
@@ -210,7 +220,7 @@ def main():
     while True:
 
         message = exchange.read_message()
-        adr(exchange, dict_trades["VALBZ"], dict_trades["VALE"])
+        adr(exchange, dict_trades["VALBZ"], dict_trades["VALE"]) 
 
         # Some of the message types below happen infrequently and contain
         # important information to help you understand what your bot is doing,
@@ -236,6 +246,18 @@ def main():
                     if (message["price"] < 1000 and dict_positions["BOND"]<=99):
                         order_id += 1
                         exchange.send_add_message(order_id, "BOND", Dir.BUY,  999, 1)
+            if message["symbol"] == "GS":
+                for index in range(message["size"]):
+                    dict_trades["GS"].append(message["price"])
+            if message["symbol"] == "MS":
+                for index in range(message["size"]):
+                        dict_trades["MS"].append(message["price"])
+            if message["symbol"] == "WFC":
+                for index in range(message["size"]):
+                    dict_trades["WFC"].append(message["price"])
+            if message["symbol"] == "XLF":
+                for index in range(message["size"]):
+                    dict_trades["XLF"].append(message["price"])
                 
             # print(messagse)      
         elif message["type"] == "error":
